@@ -10,12 +10,12 @@ if [ "$#" == "1" ];then
 	n_nodes=$1
 fi
 
-PREFIX_DIR="$PWD/regtest"
-if ! test -d "$PREFIX_DIR";then
-	mkdir "$PREFIX_DIR"
-fi
-
 start_regtest () {
+	PREFIX_DIR="$PWD/regtest"
+	if ! test -d "$PREFIX_DIR";then
+		mkdir "$PREFIX_DIR"
+	fi
+
 	for i in `seq $n_nodes`;do
 		bc_rpc=$((9000 + $i))
 		bc_port=$((10000 + $i))
@@ -30,10 +30,9 @@ start_regtest () {
 		echo "Started lightningd on top of it with directory $ln_dir"
 		echo ""
 		alias "bcreg$i"="bitcoin-cli -regtest -rpcpassword=test -rpcuser=test -rpcport=$bc_rpc"
-		alias "lnreg$i"="lightning-cli --lightning-dir lndir$i"
+		alias "lnreg$i"="lightning-cli --lightning-dir $ln_dir"
 	done
 
-	echo ""
 	echo ""
 	echo "Started $n_nodes pairs of bitcoind and lightningd nodes with rpc user \"test\" and pass \"test\"."
 	echo "You can access them using aliases created for each one : bcregi and lnregi with i the node number for bitcoin-cli and lightning cli."
@@ -41,6 +40,11 @@ start_regtest () {
 }
 
 stop_regtest () {
+	PREFIX_DIR="$PWD/regtest"
+	if ! test -d "$PREFIX_DIR";then
+		mkdir "$PREFIX_DIR"
+	fi
+
 	echo "lightningd can take some time to stop. It will be fixed in v0.7.2"
 	for i in `seq $n_nodes`;do
 		lightning-cli --lightning-dir "$PREFIX_DIR/lndir$i" stop > /dev/null
