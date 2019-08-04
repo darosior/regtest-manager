@@ -8,6 +8,12 @@ This does not intend to be robust (or clean :-)), just an utility (source it in 
   
 ## Usage
   
+Quick setup:
+```
+source regtest_manager
+start_regtest 3 && fund_regtest # A minute later you have a fully set up LN regtest
+```
+  
 By sourcing the `regtest_manager` script you can use 2 functions to start a test network of any number of nodes.  
 ```bash
 source regtest_manager
@@ -16,18 +22,21 @@ start_regtest # Default is 2 nodes, otherwise the number can be specified as an 
 ==>
 ```bash
 $ start_regtest 3
-Started bitcoind n.1 with P2P port 10001, RPC port 9001 and datadir /home/darosior/test/regtest/bcdir1
-Started lightningd on top of it with directory /home/darosior/test/regtest/lndir1
+Started bitcoind n.1 with P2P port 10001, RPC port 9001 and datadir /home/darosior/projects/pylightning-qt/regtest/bcdir1
+Started lightningd on top of it with directory /home/darosior/projects/pylightning-qt/regtest/lndir1
 
-Started bitcoind n.2 with P2P port 10002, RPC port 9002 and datadir /home/darosior/test/regtest/bcdir2
-Started lightningd on top of it with directory /home/darosior/test/regtest/lndir2
+Started bitcoind n.2 with P2P port 10002, RPC port 9002 and datadir /home/darosior/projects/pylightning-qt/regtest/bcdir2
+Started lightningd on top of it with directory /home/darosior/projects/pylightning-qt/regtest/lndir2
+
+Started bitcoind n.3 with P2P port 10003, RPC port 9003 and datadir /home/darosior/projects/pylightning-qt/regtest/bcdir3
+Started lightningd on top of it with directory /home/darosior/projects/pylightning-qt/regtest/lndir3
 
 
-Started 2 pairs of bitcoind and lightningd nodes with rpc user "test" and pass "test".
+Started 3 pairs of bitcoind and lightningd nodes with rpc user "test" and pass "test".
 You can access them using aliases created for each one : bcregi and lnregi with i the node number for bitcoin-cli and lightning cli.
 For example you can try with "bcreg2 getblockchaininfo" and "lnreg2 getinfo"
 ```
-To access a node, use lnreg__i__ or bcreg__i__ with i the node number. For example:
+To access a node, use lnreg_i_ or bcreg_i_ with i the node number. For example:
 ```bash
 $ lnreg2 getinfo
 {
