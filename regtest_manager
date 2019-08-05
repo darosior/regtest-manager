@@ -67,8 +67,9 @@ fund_regtest () {
 	echo "This didn't work.. Ok, let's try to generate more than 50 blocks to get some mature ones"
 	for n in $(seq 60);do
 		for i in $(seq $n_nodes);do
+			bcli="bitcoin-cli -regtest -rpcpassword=test -rpcuser=test -rpcport=$((9000 + $i))"
 			if [ "$n" = "1" ];then
-				while [ $($bcli_i getblockchaininfo > /dev/null; echo $?) -ne 0 ];do
+				while [ $($bcli getblockchaininfo > /dev/null; echo $?) -ne 0 ];do
 					echo "Waiting for bitcoind to warmup.."
 					sleep 1
 				done

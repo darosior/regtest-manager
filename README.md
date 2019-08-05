@@ -82,6 +82,8 @@ Waiting for lightningd to be aware of its bitcoins
    "channel_id" : "72acc3815eeb4ea75edb648d52b73aba3c3e893b08794c60fb8afca6c29b71a7"
 }
 ```
+Note that it will also start generating blocks in the background.  
+  
 Finally, you can stop them one by one but also stop them all via (which deletes also data directories):
 ```bash
 $ stop_regtest 
