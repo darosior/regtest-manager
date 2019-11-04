@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 
 if [ "$0" = "$BASH_SOURCE" ];then
-	echo "You should source this script to benefit of aliases"
+	echo "You should source this script to benefit of aliases and functions."
 	exit 0
 fi
 
+# Just spin up two nodes by default
 n_nodes=2
+
+# Use the global env lightningd by default
+if [ -z "$LIGHTNINGD_PATH" ];then LIGHTNINGD_PATH="/usr/local/bin/lightningd";fi
+LIGHTNINGD="$LIGHTNINGD_PATH --daemon --network regtest --bitcoin-rpcuser test --bitcoin-rpcpassword test --log-level debug --log-file debug.log"
+
+# Use the global env bitcoind by default
+if [ -z "$BITCOIND_PATH" ];then BITCOIND_PATH="/usr/local/bin/bitcoind";fi
+BITCOIND="$BITCOIND_PATH -daemon -regtest -txindex -whitelist=\"127.0.0.1\" -rpcpassword=\"test\" -rpcuser=\"test\""
 
 start_regtest () {
 	PREFIX_DIR="$PWD/regtest"
-	if ! test -d "$PREFIX_DIR";then
-		mkdir "$PREFIX_DIR"
-	fi
 
 	if [ "$#" == "1" ];then
 		n_nodes=$1
@@ -23,23 +29,25 @@ start_regtest () {
 		bc_dir="$PREFIX_DIR/bcdir$i"
 		ln_port=$((11000 + $i))
 		ln_dir="$PREFIX_DIR/lndir$i"
-		mkdir "$bc_dir"
-		bitcoind -daemon -regtest -txindex -connect="127.0.0.1:$(($bc_port - 1))" -whitelist="127.0.0.1" -rpcpassword="test" -rpcuser="test" -rpcport="$bc_rpc" -datadir="$bc_dir" -bind="127.0.0.1:$bc_port" > /dev/null
-		echo "Started bitcoind n.$i with P2P port $bc_port, RPC port $bc_rpc and datadir $bc_dir"
+		mkdir -p "$bc_dir" "$ln_dir"
+		eval "$BITCOIND -connect=\"127.0.0.1:$(($bc_port - 1))\" -rpcport=\"$bc_rpc\" -datadir=\"$bc_dir\" -bind=\"127.0.0.1:$bc_port\"" > /dev/null
+		alias "bdreg$i"="$BITCOIND -connect=127.0.0.1:$(($bc_port - 1)) -rpcport=$bc_rpc -datadir=$bc_dir -bind=127.0.0.1:$bc_port"
+		echo "Started bitcoind #$i with P2P port $bc_port, RPC port $bc_rpc and datadir $bc_dir"
 		sleep 0.2
-		lightningd --daemon --network regtest --bitcoin-rpcuser test --bitcoin-rpcpassword test --bitcoin-datadir "$bc_dir" --bitcoin-rpcport $bc_rpc --bind-addr "127.0.0.1:$ln_port" --lightning-dir "$ln_dir" --alias "testnode$i" > /dev/null
+		eval "$CLNG --bitcoin-datadir $bc_dir --bitcoin-rpcport $bc_rpc --bind-addr 127.0.0.1:$ln_port --lightning-dir $ln_dir --alias testnode$i"
+		alias "lnreg$i"="$CLNG --bitcoin-datadir $bc_dir --bitcoin-rpcport $bc_rpc bind-addr 127.0.0.1:$ln_port --lightning-dir $ln_dir --alias testnode$i"
 		echo "Started lightningd on top of it with directory $ln_dir"
-		echo ""
 		alias "bcreg$i"="bitcoin-cli -regtest -rpcpassword=test -rpcuser=test -rpcport=$bc_rpc"
-		alias "lnreg$i"="lightning-cli --lightning-dir $ln_dir"
+		alias "lcreg$i"="lightning-cli --lightning-dir $ln_dir"
+		echo "==> You can access the lighntingd startup command line with 'lnreg$i', the bitcoind startup command line with 'bdreg$i', the lightning CLI with 'lcreg$i', and the bitcoin CLI with 'bcreg$i'."
+		echo ""
 	done
 
 	echo ""
-	echo "Started $n_nodes pairs of bitcoind and lightningd nodes with rpc user \"test\" and pass \"test\"."
-	echo "You can access them using aliases created for each one : bcregi and lnregi with i the node number for bitcoin-cli and lightning cli."
-	echo "For example you can try with \"bcreg2 getblockchaininfo\" and \"lnreg2 getinfo\" "
+	echo "Started $n_nodes pairs of bitcoind and lightningd nodes with rpc user \"test\" and pass \"test\" (and poor alias names)."
 }
 
+# Generates blocks not too quickly and keep everyone in sync
 generate_regtest () {
 	while true;do
 		for i in $(seq $n_nodes);do
@@ -49,22 +57,34 @@ generate_regtest () {
 			fi
 			sleep 3
 		done
-		sleep 5
+		sleep 15
 	done
 }
 
+# First param is CLI, second is the number of blocks to wait for
+wait_for_blocks () {
+	desired_height=$(($($1 getblockcount) + $2));
+	while test $($1 getblockcount) -lt $desired_height;do
+		sleep 1
+	done
+}
+
+# With A, B, C three lightning daemons, this funds channels such as A => B => C
 fund_regtest () {
 	if [ $(jq --help > /dev/null; echo $?) -ne 0 ];then
-		echo "I need the 'jq' package in order to fund channels."
+		echo "I need the 'jq' utility in order to fund channels."
 		return
 	fi
 
 	# We cannot brutally generate blocks here or we'll fork
-	echo "Getting some bitcoins on each 'bitcoind'"
+	# FIXME: Or maybe if there is only one generator this would be ok ?
+	echo "Getting some bitcoins on each bitcoin daemon"
 	echo "Oh, they are immature :-("
 	echo "Let's try to water them so they grow up"
 	sleep 0.2
-	echo "This didn't work.. Ok, let's try to generate more than 50 blocks to get some mature ones"
+	echo "This didn't work.. What can we do ?"
+	sleep 0.2
+	echo "Hmmm let's try to generate more than 50 blocks to get some mature ones"
 	for n in $(seq 60);do
 		for i in $(seq $n_nodes);do
 			bcli="bitcoin-cli -regtest -rpcpassword=test -rpcuser=test -rpcport=$((9000 + $i))"
@@ -76,27 +96,28 @@ fund_regtest () {
 			fi
 			bcli="bitcoin-cli -regtest -rpcpassword=test -rpcuser=test -rpcport=$((9000 + $i))"
 			$bcli generatetoaddress 1 $($bcli getnewaddress) > /dev/null
-			# Hacky and probably inneficient way to prevent a race condition between net msg and block template
-			sleep 0.2
+			sleep 0.01
 		done
+		sleep 0.1
 		echo -en "\r$n/60 blocks generated"
 	done
-	echo -n "\nThis worked !!"
+	sleep 2
+	echo ""
+	echo "This worked !!"
 
+	echo "(We start generating blocks in background)..."
 	generate_regtest &
-	echo "(We started generating blocks in background)..."
 
-	# The first try put all in a single loop, it hard forked miserably
-	echo "Transferring some to each 'lightningd'"
+	echo "Transferring some to each lightning daemon"
 	for i in $(seq $n_nodes);do
 		bcli="bitcoin-cli -regtest -rpcpassword=test -rpcuser=test -rpcport=$((9000 + $i))"
 		lcli="lightning-cli --lightning-dir $PREFIX_DIR/lndir$i"
-		$bcli sendtoaddress $($lcli newaddr | jq -r .address) 10 > /dev/null
+		$bcli sendtoaddress $($lcli newaddr | jq -r .address) 10
 	done
-	# Wait for a block
-	sleep 5
+	wait_for_blocks "$bcli" "1"
 
-	echo "Now let's fund channels ! Channels are funded like node_n ==> node_n+1"
+	echo "Now let's fund channels !"
+	echo "Dirty notes: there are some problems as of now (November 2019) with lightningd detecting its utxos on regtest.. You might want to use dev-rescan-outputs sometimes on lcreg1, or just restart this (slow enough..) function."
 	for i in $(seq $(($n_nodes - 1)));do
 		# i current, ii next one
 		lcli_i="lightning-cli --lightning-dir $PREFIX_DIR/lndir$i"
@@ -111,14 +132,46 @@ fund_regtest () {
 			list=$($lcli_i listfunds | jq .outputs[0])
 		done
 		sleep 1
-		$lcli_i fundchannel $id_ii 100000 300perkw
+		$lcli_i fundchannel $id_ii 100000 253perkw
 		echo ""
 	done
-	# Wait for a block
-	sleep 5
+	wait_for_blocks "$bcli" "1"
 	echo "Ok, you should be all set!"
 }
 
+# For a network of at least 3 nodes, this funds a channel between the nodes i and i-2 for
+# i >= 3.
+fund_many_regtest () {
+	if [ $n_nodes -lt 3 ];then
+		echo "Your regtest network is not large enough to fund many channels."
+		return
+	fi
+
+	for i in $(seq 3 $n_nodes);do
+		lcli_i="lightning-cli --lightning-dir $PREFIX_DIR/lndir$i"
+		lcli_ii="lightning-cli --lightning-dir $PREFIX_DIR/lndir$(($i - 2))"
+		echo "Funding a channel between node $i and node $(($i - 2)) :"
+		id_ii=$($lcli_ii getinfo | jq -r .id)
+		$lcli_i connect "$id_ii@127.0.0.1:$((11000 + $i - 2))" > /dev/null
+		$lcli_i fundchannel $id_ii 100000 253perkw
+		echo ""
+	done
+
+	echo "All done, now wait for channels to be locked"
+}
+
+# This funds a channel between two running lightning daemons
+# First param is the indice of the funder (e.g. 2)
+# Second param is the indice of the fundee (e.g. 4)
+fund_channel_regtest () {
+	lcli_i="lightning-cli --lightning-dir $PREFIX_DIR/lndir$1"
+	lcli_ii="lightning-cli --lightning-dir $PREFIX_DIR/lndir$2"
+	id_ii=$($lcli_ii getinfo | jq -r .id)
+	$lcli_i connect "$id_ii@127.0.0.1:$((11000 + $2))" > /dev/null
+	$lcli_i fundchannel $id_ii 100000 253perkw
+}
+
+# Stop the regression testing network and __deletes the data directories__
 stop_regtest () {
 	PREFIX_DIR="$PWD/regtest"
 	if ! test -d "$PREFIX_DIR";then
@@ -126,19 +179,21 @@ stop_regtest () {
 		return
 	fi
 
-	echo "lightningd can take some time to stop. It will be fixed in v0.7.2"
 	for i in $(seq $n_nodes);do
 		lightning-cli --lightning-dir "$PREFIX_DIR/lndir$i" stop > /dev/null
 		rm -rf "$PREFIX_DIR/lndir$i"
-		echo "lightningd n.$i stopped"
+		echo "lightningd #$i stopped"
 		sleep 0.1
 		bitcoin-cli -regtest -rpcpassword=test -rpcuser=test -rpcport=$((9000 + $i)) stop > /dev/null
 		rm -rf "$PREFIX_DIR/bcdir$i"
-		echo "bitcoind n.$i stopped"
+		echo "bitcoind #$i stopped"
 	done
 }
 
+# Don't use if you're up-to-date
 kill_regtest () {
+	echo "Getting bitcoin and lightning daemons PID with a hacky hack, and killing them :
+	prefer using 'stop_regtest' if you run lightningd > 0.7.2";
 	for i in $(ps -edf |grep -E 'bitcoind|lightningd' |grep regtest |cut -c 10-15);do
 		kill -9 $i
 	done

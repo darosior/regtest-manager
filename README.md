@@ -1,20 +1,19 @@
 # regtest-manager
-*A quick and dirty solution to start a (Lightning) regtest*  
-  
+*Quick and dirties bash functions to start a Bitcoin and Lightning Network regtest*
+
 ## Rationale
-  
-Setup a regtest is both cumbersome (/repetitive) and pretty useful for a lot of Bitcoin / Lightning Network applications (e.g. plugins). I needed that automation. So I did it and published it here.  
-This does not intend to be robust (or clean :-)), just an utility (source it in your bashrc). For a more complete solution, check out [lnet](https://github.com/cdecker/lnet).  
-  
+
+Setup a regtest is both cumbersome (/repetitive) and pretty useful for a lot of Bitcoin / Lightning Network applications (e.g. you might need one for plugins). I needed that automation. So I did it and published it here.
+This does not intend to be robust (or clean :-)), just an utility (source it in your bashrc). For a more complete solution, check out [lnet](https://github.com/cdecker/lnet).
+
 ## Usage
-  
 Quick setup:
 ```
 source regtest_manager
-start_regtest 3 && fund_regtest # A minute later you have a fully set up LN regtest
+start_regtest 3 && fund_regtest # A minute later you have a fully set up LN regtest
 ```
-  
-By sourcing the `regtest_manager` script you can use 2 functions to start a test network of any number of nodes.  
+
+By sourcing the `regtest_manager` script you can use 2 functions to start a test network of any number of nodes.
 ```bash
 source regtest_manager
 start_regtest # Default is 2 nodes, otherwise the number can be specified as an argument
@@ -22,23 +21,24 @@ start_regtest # Default is 2 nodes, otherwise the number can be specified as an 
 ==>
 ```bash
 $ start_regtest 3
-Started bitcoind n.1 with P2P port 10001, RPC port 9001 and datadir /home/darosior/projects/pylightning-qt/regtest/bcdir1
-Started lightningd on top of it with directory /home/darosior/projects/pylightning-qt/regtest/lndir1
 
-Started bitcoind n.2 with P2P port 10002, RPC port 9002 and datadir /home/darosior/projects/pylightning-qt/regtest/bcdir2
-Started lightningd on top of it with directory /home/darosior/projects/pylightning-qt/regtest/lndir2
+Started bitcoind 1 with P2P port 10001, RPC port 9001 and datadir /home/darosior/projects/regtest_manager/regtest/bcdir1
+Started lightningd on top of it with directory /home/darosior/projects/regtest_manager/regtest/lndir1
+==> You can access the lighntingd startup command line with 'lnreg1', the bitcoind startup command line with 'bdreg1', the lightning CLI with 'lcreg1', and the bitcoin CLI with 'bcreg1'.
 
-Started bitcoind n.3 with P2P port 10003, RPC port 9003 and datadir /home/darosior/projects/pylightning-qt/regtest/bcdir3
-Started lightningd on top of it with directory /home/darosior/projects/pylightning-qt/regtest/lndir3
+Started bitcoind 2 with P2P port 10002, RPC port 9002 and datadir /home/darosior/projects/regtest_manager/regtest/bcdir2
+Started lightningd on top of it with directory /home/darosior/projects/regtest_manager/regtest/lndir2
+==> You can access the lighntingd startup command line with 'lnreg2', the bitcoind startup command line with 'bdreg2', the lightning CLI with 'lcreg2', and the bitcoin CLI with 'bcreg2'.
+
+Started bitcoind 3 with P2P port 10003, RPC port 9003 and datadir /home/darosior/projects/regtest_manager/regtest/bcdir3
+Started lightningd on top of it with directory /home/darosior/projects/regtest_manager/regtest/lndir3
+==> You can access the lighntingd startup command line with 'lnreg3', the bitcoind startup command line with 'bdreg3', the lightning CLI with 'lcreg3', and the bitcoin CLI with 'bcreg3'.
 
 
-Started 3 pairs of bitcoind and lightningd nodes with rpc user "test" and pass "test".
-You can access them using aliases created for each one : bcregi and lnregi with i the node number for bitcoin-cli and lightning cli.
-For example you can try with "bcreg2 getblockchaininfo" and "lnreg2 getinfo"
+Started 3 pairs of bitcoind and lightningd nodes with rpc user "test" and pass "test" (and poor alias names).
 ```
-To access a node, use lnreg_i_ or bcreg_i_ with i the node number. For example:
 ```bash
-$ lnreg2 getinfo
+$ lcreg2 getinfo
 {
    "id" : "03b1762af584f80a1b644f029d7f13c1f58e4c53a54e0e0a944454813f76a86b2f",
    "alias" : "testnode2",
@@ -65,6 +65,7 @@ $ lnreg2 getinfo
 You can fund a channel between all nodes (like l1 --> l2 --> l3) with:
 ```bash
 $ fund_regtest
+
 Getting some bitcoins on both 'bitcoind' and 'lightningd' for each node
 Funding a channel between node 1 and node 2 :
 Waiting for lightningd to be aware of its bitcoins
@@ -82,14 +83,42 @@ Waiting for lightningd to be aware of its bitcoins
    "channel_id" : "72acc3815eeb4ea75edb648d52b73aba3c3e893b08794c60fb8afca6c29b71a7"
 }
 ```
-Note that it will also start generating blocks in the background.  
-  
-Finally, you can stop them one by one but also stop them all via (which deletes also data directories):
+Note that it will also start generating blocks in the background.
+
+\
+You can stop all daemons with (which deletes also data directories):
 ```bash
-$ stop_regtest 
+$ stop_regtest
+
 lightningd can take some time to stop. It will be fixed in v0.7.2
-lightningd n.1 stopped
-bitcoind n.1 stopped
-lightningd n.2 stopped
-bitcoind n.2 stopped
+lightningd 1 stopped
+bitcoind 1 stopped
+lightningd 2 stopped
+bitcoind 2 stopped
+lightningd 3 stopped
+bitcoind 3 stopped
 ```
+
+\
+You can setup a fully connected network (needs a regtest of at least 3 nodes) with
+```bash
+$ fund_many_regtest
+```
+If you have a network of, say, 5 nodes A B C D E, then `fund_regtest` will fund channels
+such as
+```
+A ==> B ==> C ==> D ==> E
+```
+And `fund_many_regtest` will fund channels such as
+```
+C ==> A,   D ==> B,   E ==> C
+```
+
+\
+You can setup `lightningd` and `bitcoind` pathes, for example:
+```bash
+BITCOIND_PATH=$PWD/bitcoin/src/bitcoind LIGHTNINGD_PATH=$PWD/lightning/lightningd/lightningd start_regtest
+```
+
+\
+There exists a dirty function to cleanup in case of quirks, `kill_regtest`.
