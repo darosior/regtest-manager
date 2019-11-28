@@ -8,15 +8,15 @@ fi
 # Just spin up two nodes by default
 n_nodes=2
 
-# Use the global env lightningd by default
-if [ -z "$LIGHTNINGD_PATH" ];then LIGHTNINGD_PATH="/usr/local/bin/lightningd";fi
-LIGHTNINGD="$LIGHTNINGD_PATH --daemon --network regtest --bitcoin-rpcuser test --bitcoin-rpcpassword test --log-level debug --log-file debug.log"
-
-# Use the global env bitcoind by default
-if [ -z "$BITCOIND_PATH" ];then BITCOIND_PATH="/usr/local/bin/bitcoind";fi
-BITCOIND="$BITCOIND_PATH -daemon -regtest -txindex -whitelist=\"127.0.0.1\" -rpcpassword=\"test\" -rpcuser=\"test\""
-
 start_regtest () {
+	# Use the global env lightningd by default
+	if [ -z "$LIGHTNINGD_PATH" ];then LIGHTNINGD_PATH="/usr/local/bin/lightningd";fi
+	LIGHTNINGD="$LIGHTNINGD_PATH --daemon --network regtest --bitcoin-rpcuser test --bitcoin-rpcpassword test --log-level debug --log-file debug.log"
+
+	# Use the global env bitcoind by default
+	if [ -z "$BITCOIND_PATH" ];then BITCOIND_PATH="/usr/local/bin/bitcoind";fi
+	BITCOIND="$BITCOIND_PATH -daemon -regtest -txindex -whitelist=\"127.0.0.1\" -rpcpassword=\"test\" -rpcuser=\"test\" -debug"
+
 	PREFIX_DIR="$PWD/regtest"
 
 	if [ "$#" == "1" ];then
@@ -34,11 +34,11 @@ start_regtest () {
 		alias "bdreg$i"="$BITCOIND -connect=127.0.0.1:$(($bc_port - 1)) -rpcport=$bc_rpc -datadir=$bc_dir -bind=127.0.0.1:$bc_port"
 		echo "Started bitcoind #$i with P2P port $bc_port, RPC port $bc_rpc and datadir $bc_dir"
 		sleep 0.2
-		eval "$CLNG --bitcoin-datadir $bc_dir --bitcoin-rpcport $bc_rpc --bind-addr 127.0.0.1:$ln_port --lightning-dir $ln_dir --alias testnode$i"
-		alias "lnreg$i"="$CLNG --bitcoin-datadir $bc_dir --bitcoin-rpcport $bc_rpc bind-addr 127.0.0.1:$ln_port --lightning-dir $ln_dir --alias testnode$i"
+		eval "$LIGHTNINGD --bitcoin-datadir $bc_dir --bitcoin-rpcport $bc_rpc --bind-addr 127.0.0.1:$ln_port --lightning-dir $ln_dir --alias testnode$i"
+		alias "lnreg$i"="$LIGHTNINGD --bitcoin-datadir $bc_dir --bitcoin-rpcport $bc_rpc --bind-addr 127.0.0.1:$ln_port --lightning-dir $ln_dir --alias testnode$i"
 		echo "Started lightningd on top of it with directory $ln_dir"
 		alias "bcreg$i"="bitcoin-cli -regtest -rpcpassword=test -rpcuser=test -rpcport=$bc_rpc"
-		alias "lcreg$i"="lightning-cli --lightning-dir $ln_dir"
+		alias "lcreg$i"="lightning-cli --lightning-dir $ln_dir --network regtest"
 		echo "==> You can access the lighntingd startup command line with 'lnreg$i', the bitcoind startup command line with 'bdreg$i', the lightning CLI with 'lcreg$i', and the bitcoin CLI with 'bcreg$i'."
 		echo ""
 	done
@@ -111,17 +111,16 @@ fund_regtest () {
 	echo "Transferring some to each lightning daemon"
 	for i in $(seq $n_nodes);do
 		bcli="bitcoin-cli -regtest -rpcpassword=test -rpcuser=test -rpcport=$((9000 + $i))"
-		lcli="lightning-cli --lightning-dir $PREFIX_DIR/lndir$i"
+		lcli="lightning-cli --lightning-dir $PREFIX_DIR/lndir$i --network regtest"
 		$bcli sendtoaddress $($lcli newaddr | jq -r .address) 10
 	done
 	wait_for_blocks "$bcli" "1"
 
 	echo "Now let's fund channels !"
-	echo "Dirty notes: there are some problems as of now (November 2019) with lightningd detecting its utxos on regtest.. You might want to use dev-rescan-outputs sometimes on lcreg1, or just restart this (slow enough..) function."
 	for i in $(seq $(($n_nodes - 1)));do
 		# i current, ii next one
-		lcli_i="lightning-cli --lightning-dir $PREFIX_DIR/lndir$i"
-		lcli_ii="lightning-cli --lightning-dir $PREFIX_DIR/lndir$(($i + 1))"
+		lcli_i="lightning-cli --lightning-dir $PREFIX_DIR/lndir$i --network regtest"
+		lcli_ii="lightning-cli --lightning-dir $PREFIX_DIR/lndir$(($i + 1)) --network regtest"
 		echo "Funding a channel between node $i and node $(($i + 1)) :"
 		id_ii=$($lcli_ii getinfo | jq -r .id)
 		$lcli_i connect "$id_ii@127.0.0.1:$((11000 + $i + 1))" > /dev/null
@@ -148,8 +147,8 @@ fund_many_regtest () {
 	fi
 
 	for i in $(seq 3 $n_nodes);do
-		lcli_i="lightning-cli --lightning-dir $PREFIX_DIR/lndir$i"
-		lcli_ii="lightning-cli --lightning-dir $PREFIX_DIR/lndir$(($i - 2))"
+		lcli_i="lightning-cli --lightning-dir $PREFIX_DIR/lndir$i --network regtest"
+		lcli_ii="lightning-cli --lightning-dir $PREFIX_DIR/lndir$(($i - 2)) --network regtest"
 		echo "Funding a channel between node $i and node $(($i - 2)) :"
 		id_ii=$($lcli_ii getinfo | jq -r .id)
 		$lcli_i connect "$id_ii@127.0.0.1:$((11000 + $i - 2))" > /dev/null
@@ -164,8 +163,8 @@ fund_many_regtest () {
 # First param is the indice of the funder (e.g. 2)
 # Second param is the indice of the fundee (e.g. 4)
 fund_channel_regtest () {
-	lcli_i="lightning-cli --lightning-dir $PREFIX_DIR/lndir$1"
-	lcli_ii="lightning-cli --lightning-dir $PREFIX_DIR/lndir$2"
+	lcli_i="lightning-cli --lightning-dir $PREFIX_DIR/lndir$1 --network regtest"
+	lcli_ii="lightning-cli --lightning-dir $PREFIX_DIR/lndir$2 --network regtest"
 	id_ii=$($lcli_ii getinfo | jq -r .id)
 	$lcli_i connect "$id_ii@127.0.0.1:$((11000 + $2))" > /dev/null
 	$lcli_i fundchannel $id_ii 100000 253perkw
@@ -180,7 +179,7 @@ stop_regtest () {
 	fi
 
 	for i in $(seq $n_nodes);do
-		lightning-cli --lightning-dir "$PREFIX_DIR/lndir$i" stop > /dev/null
+		lightning-cli --lightning-dir "$PREFIX_DIR/lndir$i" --network regtest stop > /dev/null
 		rm -rf "$PREFIX_DIR/lndir$i"
 		echo "lightningd #$i stopped"
 		sleep 0.1
